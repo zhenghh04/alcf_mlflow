@@ -52,6 +52,14 @@ mkdir -p "${CONFIG_DIR}"
 
 OAUTH_CFG="${CONFIG_DIR}/oauth2-proxy.cfg"
 NGINX_CFG="${CONFIG_DIR}/nginx-mlflow-globus.conf"
+GENERATE_VM_NGINX_CONF="${GENERATE_VM_NGINX_CONF:-true}"
+GENERATE_VM_NGINX_CONF="$(echo "${GENERATE_VM_NGINX_CONF}" | tr '[:upper:]' '[:lower:]')"
+
+VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME:-${PUBLIC_BASE_URL#https://}}"
+VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME#http://}"
+VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME%%/*}"
+VM_TLS_CERT_PATH="${VM_TLS_CERT_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/fullchain.pem}"
+VM_TLS_KEY_PATH="${VM_TLS_KEY_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/privkey.pem}"
 
 cat > "${OAUTH_CFG}" <<EOF
 provider = "oidc"
@@ -74,6 +82,7 @@ pass_access_token = true
 skip_provider_button = true
 EOF
 
+if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
 cat > "${NGINX_CFG}" <<EOF
 upstream mlflow_upstream {
     server 127.0.0.1:8080;
@@ -85,11 +94,11 @@ upstream oauth2_proxy {
 
 server {
     listen 443 ssl http2;
-    server_name mlflow.alcf.anl.gov;
+    server_name ${VM_NGINX_SERVER_NAME};
 
     # Replace with your certificate paths.
-    ssl_certificate /etc/letsencrypt/live/mlflow.alcf.anl.gov/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mlflow.alcf.anl.gov/privkey.pem;
+    ssl_certificate ${VM_TLS_CERT_PATH};
+    ssl_certificate_key ${VM_TLS_KEY_PATH};
 
     location = /oauth2/auth {
         proxy_pass http://oauth2_proxy;
@@ -129,14 +138,25 @@ server {
     }
 }
 EOF
+fi
 
-chmod 600 "${OAUTH_CFG}" "${NGINX_CFG}"
+chmod 600 "${OAUTH_CFG}"
+if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
+  chmod 600 "${NGINX_CFG}"
+fi
 
 echo "Generated:"
 echo "  ${OAUTH_CFG}"
-echo "  ${NGINX_CFG}"
+if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
+  echo "  ${NGINX_CFG}"
+fi
 echo
 echo "Next:"
 echo "  1) Install oauth2-proxy and run with ${OAUTH_CFG}"
-echo "  2) Install nginx conf from ${NGINX_CFG}"
-echo "  3) Keep MLflow running at ${MLFLOW_INTERNAL_UPSTREAM}"
+if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
+  echo "  2) Install nginx conf from ${NGINX_CFG}"
+  echo "  3) Keep MLflow running at ${MLFLOW_INTERNAL_UPSTREAM}"
+else
+  echo "  2) Configure your external nginx to use oauth2-proxy at ${OAUTH2_PROXY_HTTP_ADDRESS}"
+  echo "  3) Keep MLflow running at ${MLFLOW_INTERNAL_UPSTREAM}"
+fi

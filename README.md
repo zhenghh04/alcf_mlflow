@@ -14,6 +14,7 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `server/setup_venv.sh`: create Python virtual environment and install MLflow
 - `server/setup_auth.sh`: generate `basic_auth.ini` from `.env`
 - `server/setup_globus_auth.sh`: generate `oauth2-proxy` and `nginx` configs from `.env`
+- `server/install_oauth2_proxy.sh`: build and install `oauth2-proxy` from GitHub source tag
 - `server/start_mlflow.sh`: start MLflow server in background with log + pid files
 - `server/stop_mlflow.sh`: stop the background MLflow server
 - `server/health_check.sh`: validate server health endpoint
@@ -135,6 +136,7 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
    - `GLOBUS_OAUTH_CLIENT_ID=<client-id>`
    - `GLOBUS_OAUTH_CLIENT_SECRET=<client-secret>`
    - `OAUTH2_PROXY_COOKIE_SECRET=<32-byte-base64-secret>`
+   - If TLS/auth routing is handled by external nginx (outside VM), set `GENERATE_VM_NGINX_CONF=false`
 2. Keep MLflow internal-only behind proxy (recommended):
    - `MLFLOW_HOST=127.0.0.1`
 3. Generate proxy configs:
@@ -143,17 +145,24 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
    ```
 4. Install generated files:
    - `server/generated/oauth2-proxy.cfg` -> your oauth2-proxy runtime config path
-   - `server/generated/nginx-mlflow-globus.conf` -> your nginx site config path
-5. Install and start systemd units:
+   - `server/generated/nginx-mlflow-globus.conf` -> your nginx site config path (only when `GENERATE_VM_NGINX_CONF=true`)
+5. Install `oauth2-proxy` binary:
+   ```bash
+   bash server/install_oauth2_proxy.sh
+   ```
+6. Install and start systemd units:
    ```bash
    bash server/install_systemd_globus.sh
    ```
-6. Install nginx config and reload nginx:
+7. If VM nginx is used (`GENERATE_VM_NGINX_CONF=true`), install nginx config and reload nginx:
    ```bash
    sudo cp server/generated/nginx-mlflow-globus.conf /etc/nginx/conf.d/mlflow-globus.conf
    sudo nginx -t
    sudo systemctl reload nginx
    ```
+8. If external nginx is used (`GENERATE_VM_NGINX_CONF=false`), configure external nginx to:
+   - route `/oauth2/auth` and `/oauth2/` to VM `oauth2-proxy` (`OAUTH2_PROXY_HTTP_ADDRESS`)
+   - use `auth_request /oauth2/auth;` on `/`, then proxy authenticated traffic to MLflow (`MLFLOW_INTERNAL_UPSTREAM` on VM)
 
 ## Stop server
 
