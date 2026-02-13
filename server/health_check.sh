@@ -12,7 +12,7 @@ fi
 # shellcheck source=/dev/null
 source "${ENV_FILE}"
 
-url="http://127.0.0.1:${MLFLOW_PORT}/health"
+url="${MLFLOW_HOST}:${MLFLOW_PORT}/health"
 echo "Checking ${url}"
 curl -fsS "${url}"
 echo

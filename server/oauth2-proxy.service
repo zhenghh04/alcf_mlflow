@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=REPLACE_WITH_VM_USERNAME
-WorkingDirectory=/home/REPLACE_WITH_VM_USERNAME/mlflow/server
-ExecStart=/usr/local/bin/oauth2-proxy --config /home/REPLACE_WITH_VM_USERNAME/mlflow/server/generated/oauth2-proxy.cfg
+User=huihuo.zheng
+WorkingDirectory=/home/huihuo.zheng/alcf_mlflow/server
+ExecStart=/usr/local/bin/oauth2-proxy --config /home/huihuo.zheng/alcf_mlflow/server/generated/oauth2-proxy.cfg
 Restart=on-failure
 RestartSec=5
 

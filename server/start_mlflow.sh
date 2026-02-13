@@ -57,12 +57,17 @@ if [[ "${AUTH_ENABLED}" == "true" ]]; then
   export MLFLOW_AUTH_CONFIG_PATH
 fi
 
+# MLflow server reads this only from environment variables.
+if [[ -n "${MLFLOW_SERVER_ENABLE_JOB_EXECUTION:-}" ]]; then
+  export MLFLOW_SERVER_ENABLE_JOB_EXECUTION
+fi
+
 if lsof -ti tcp:"${MLFLOW_PORT}" >/dev/null 2>&1; then
   conflicting_pid="$(lsof -ti tcp:"${MLFLOW_PORT}" | head -n1)"
   echo "Port ${MLFLOW_PORT} is already in use by PID ${conflicting_pid}."
   ps -p "${conflicting_pid}" -o pid=,ppid=,command=
-  echo "Stop the existing process or choose a different MLFLOW_PORT in server/.env."
-  exit 1
+  echo "I'll stop the existing process: $conflicting_pid"
+  kill $conflicting_pid
 fi
 
 mkdir -p "$(dirname "${MLFLOW_LOG_FILE}")" "$(dirname "${MLFLOW_PID_FILE}")" "${ARTIFACT_ROOT}" "${MLFLOW_HOME}/data"

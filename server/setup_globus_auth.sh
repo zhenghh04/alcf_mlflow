@@ -52,6 +52,7 @@ mkdir -p "${CONFIG_DIR}"
 
 OAUTH_CFG="${CONFIG_DIR}/oauth2-proxy.cfg"
 NGINX_CFG="${CONFIG_DIR}/nginx-mlflow-globus.conf"
+ALLOWED_EMAILS_FILE="${CONFIG_DIR}/oauth2-proxy-allowed-emails.txt"
 GENERATE_VM_NGINX_CONF="${GENERATE_VM_NGINX_CONF:-true}"
 GENERATE_VM_NGINX_CONF="$(echo "${GENERATE_VM_NGINX_CONF}" | tr '[:upper:]' '[:lower:]')"
 
@@ -60,6 +61,33 @@ VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME#http://}"
 VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME%%/*}"
 VM_TLS_CERT_PATH="${VM_TLS_CERT_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/fullchain.pem}"
 VM_TLS_KEY_PATH="${VM_TLS_KEY_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/privkey.pem}"
+OAUTH2_PROXY_UPSTREAM_SERVER="${OAUTH2_PROXY_HTTP_ADDRESS#http://}"
+OAUTH2_PROXY_UPSTREAM_SERVER="${OAUTH2_PROXY_UPSTREAM_SERVER#https://}"
+
+AUTH_EMAILS_CFG_LINE=""
+if [[ -n "${OAUTH2_PROXY_ALLOWED_EMAILS:-}" ]]; then
+  : > "${ALLOWED_EMAILS_FILE}"
+  IFS=',' read -r -a raw_allowed_emails <<< "${OAUTH2_PROXY_ALLOWED_EMAILS}"
+  valid_count=0
+  for raw_email in "${raw_allowed_emails[@]}"; do
+    email="$(printf '%s' "${raw_email}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    if [[ -z "${email}" ]]; then
+      continue
+    fi
+    if [[ "${email}" != *@* ]]; then
+      echo "Invalid email in OAUTH2_PROXY_ALLOWED_EMAILS: ${email}"
+      exit 1
+    fi
+    printf '%s\n' "${email}" >> "${ALLOWED_EMAILS_FILE}"
+    valid_count=$((valid_count + 1))
+  done
+  if [[ "${valid_count}" -eq 0 ]]; then
+    echo "OAUTH2_PROXY_ALLOWED_EMAILS is set but no valid emails were found."
+    exit 1
+  fi
+  chmod 600 "${ALLOWED_EMAILS_FILE}"
+  AUTH_EMAILS_CFG_LINE="authenticated_emails_file = \"${ALLOWED_EMAILS_FILE}\""
+fi
 
 cat > "${OAUTH_CFG}" <<EOF
 provider = "oidc"
@@ -71,14 +99,15 @@ upstreams = [ "${MLFLOW_INTERNAL_UPSTREAM}" ]
 http_address = "${OAUTH2_PROXY_HTTP_ADDRESS}"
 scope = "openid profile email"
 email_domains = [ "${OAUTH2_PROXY_EMAIL_DOMAINS}" ]
+${AUTH_EMAILS_CFG_LINE}
 cookie_secure = true
 cookie_secret = "${OAUTH2_PROXY_COOKIE_SECRET}"
 cookie_httponly = true
 cookie_samesite = "lax"
 set_xauthrequest = true
-pass_authorization_header = true
-set_authorization_header = true
-pass_access_token = true
+pass_authorization_header = false
+set_authorization_header = false
+pass_access_token = false
 skip_provider_button = true
 EOF
 
@@ -89,7 +118,7 @@ upstream mlflow_upstream {
 }
 
 upstream oauth2_proxy {
-    server 127.0.0.1:4180;
+    server ${OAUTH2_PROXY_UPSTREAM_SERVER};
 }
 
 server {
@@ -147,6 +176,9 @@ fi
 
 echo "Generated:"
 echo "  ${OAUTH_CFG}"
+if [[ -n "${AUTH_EMAILS_CFG_LINE}" ]]; then
+  echo "  ${ALLOWED_EMAILS_FILE}"
+fi
 if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
   echo "  ${NGINX_CFG}"
 fi

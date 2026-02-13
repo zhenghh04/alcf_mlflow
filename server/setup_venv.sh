@@ -15,7 +15,11 @@ source "${ENV_FILE}"
 
 mkdir -p "${MLFLOW_HOME}/data" "${ARTIFACT_ROOT}" "${MLFLOW_HOME}/logs" "${MLFLOW_HOME}/run"
 
-python3 -m venv "${VENV_DIR}"
+if ! python3 -m venv "${VENV_DIR}"; then
+  echo "python3 -m venv failed; attempting virtualenv fallback"
+  python3 -m pip install --user virtualenv
+  python3 -m virtualenv "${VENV_DIR}"
+fi
 # shellcheck source=/dev/null
 source "${VENV_DIR}/bin/activate"
 

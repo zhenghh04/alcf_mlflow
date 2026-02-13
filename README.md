@@ -14,6 +14,8 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `server/setup_venv.sh`: create Python virtual environment and install MLflow
 - `server/setup_auth.sh`: generate `basic_auth.ini` from `.env`
 - `server/setup_globus_auth.sh`: generate `oauth2-proxy` and `nginx` configs from `.env`
+- `server/setup_external_nginx_conf.sh`: generate external nginx `mlflow.conf` from `.env`
+- `server/install_external_nginx_conf.sh`: install generated external nginx config and reload nginx
 - `server/install_oauth2_proxy.sh`: build and install `oauth2-proxy` from GitHub source tag
 - `server/start_mlflow.sh`: start MLflow server in background with log + pid files
 - `server/stop_mlflow.sh`: stop the background MLflow server
@@ -163,6 +165,11 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
 8. If external nginx is used (`GENERATE_VM_NGINX_CONF=false`), configure external nginx to:
    - route `/oauth2/auth` and `/oauth2/` to VM `oauth2-proxy` (`OAUTH2_PROXY_HTTP_ADDRESS`)
    - use `auth_request /oauth2/auth;` on `/`, then proxy authenticated traffic to MLflow (`MLFLOW_INTERNAL_UPSTREAM` on VM)
+   - or generate/install an external nginx config from this repo:
+   ```bash
+   bash server/setup_external_nginx_conf.sh
+   bash server/install_external_nginx_conf.sh
+   ```
 
 ## Stop server
 
