@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" role="img" aria-label="MLflow Globus authentication architecture diagram">
+  <defs>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #1f2937; }
+      .sub { font: 400 15px Arial, sans-serif; fill: #4b5563; }
+      .node { fill: #ffffff; stroke: #334155; stroke-width: 2; rx: 14; ry: 14; }
+      .node2 { fill: #f8fafc; stroke: #334155; stroke-width: 2; rx: 14; ry: 14; }
+      .text { font: 600 18px Arial, sans-serif; fill: #111827; text-anchor: middle; }
+      .small { font: 500 14px Arial, sans-serif; fill: #374151; text-anchor: middle; }
+      .arrow { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .label { font: 500 13px Arial, sans-serif; fill: #1d4ed8; }
+      .note { font: 500 13px Arial, sans-serif; fill: #475569; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="860" fill="#f1f5f9" />
+  <text x="700" y="52" class="title" text-anchor="middle">MLflow + Globus OIDC Access Flow</text>
+  <text x="700" y="80" class="sub" text-anchor="middle">Public endpoint: https://mlflow.alcf.anl.gov</text>
+
+  <rect class="node" x="80" y="150" width="240" height="110" />
+  <text x="200" y="195" class="text">User Browser</text>
+  <text x="200" y="222" class="small">Public internet client</text>
+
+  <rect class="node" x="420" y="130" width="300" height="140" />
+  <text x="570" y="180" class="text">External Nginx</text>
+  <text x="570" y="207" class="small">mlflow.alcf.anl.gov</text>
+  <text x="570" y="229" class="small">auth_request gateway</text>
+
+  <rect class="node2" x="830" y="90" width="330" height="170" />
+  <text x="995" y="142" class="text">oauth2-proxy</text>
+  <text x="995" y="169" class="small">amsc-mlflow.alcf.anl.gov:8081</text>
+  <text x="995" y="192" class="small">Globus OIDC client</text>
+  <text x="995" y="214" class="small">allowlist enforced</text>
+
+  <rect class="node2" x="830" y="340" width="330" height="140" />
+  <text x="995" y="390" class="text">MLflow Server</text>
+  <text x="995" y="417" class="small">amsc-mlflow.alcf.anl.gov:8080</text>
+  <text x="995" y="439" class="small">tracking UI/API backend</text>
+
+  <rect class="node" x="1180" y="120" width="180" height="110" />
+  <text x="1270" y="165" class="text">Globus Auth</text>
+  <text x="1270" y="192" class="small">auth.globus.org</text>
+
+  <rect class="node" x="830" y="560" width="530" height="150" />
+  <text x="1095" y="608" class="text">Allowed Emails</text>
+  <text x="1095" y="637" class="small">huihuo.zheng@anl.gov, venkat@anl.gov, turam@anl.gov</text>
+  <text x="1095" y="663" class="small">server/generated/oauth2-proxy-allowed-emails.txt</text>
+
+  <path class="arrow" d="M320 190 L420 190" />
+  <text x="345" y="176" class="label">1. GET /</text>
+
+  <path class="arrow" d="M720 170 L830 170" />
+  <text x="742" y="156" class="label">2. /oauth2/auth</text>
+
+  <path class="arrow" d="M1160 140 L1180 140" />
+  <text x="1135" y="126" class="label">4. OIDC authorize</text>
+
+  <path class="arrow" d="M1180 205 L1125 205 L1125 250 L720 250" />
+  <text x="990" y="238" class="label">5. callback to /oauth2/callback</text>
+
+  <path class="arrow" d="M720 400 L830 400" />
+  <text x="748" y="386" class="label">7. proxy authenticated /</text>
+
+  <path class="arrow" d="M995 260 L995 340" />
+  <text x="1007" y="304" class="label">6. set session cookie</text>
+
+  <path class="arrow" d="M995 480 L995 560" />
+  <text x="1007" y="524" class="label">allowlist check</text>
+
+  <path class="arrow" d="M830 625 L250 625 L250 260" />
+  <text x="480" y="611" class="label">8. response/UI back to browser</text>
+
+  <text x="80" y="770" class="note">Flow summary: Browser -> External Nginx -> oauth2-proxy -> Globus -> oauth2-proxy -> MLflow.</text>
+  <text x="80" y="794" class="note">Access is gated by Globus login + email allowlist before proxying to MLflow backend.</text>
+</svg>
