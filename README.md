@@ -28,6 +28,12 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `examples/log_example.py`: minimal experiment logging test
 - `client/configure_client.sh`: helper to export tracking URI and credentials
 
+## Operations docs
+
+- Runbook/checklist: `docs/operations-checklist.md`
+- Architecture notes: `docs/mlflow-globus-architecture.md`
+- Architecture diagram (SVG): `docs/mlflow-globus-architecture.svg`
+
 ## Quick start (user process mode)
 
 ```bash
