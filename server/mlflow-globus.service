@@ -1,0 +1,15 @@
+[Unit]
+Description=MLflow Tracking Server (Globus Proxy Mode)
+After=network.target
+
+[Service]
+Type=simple
+User=REPLACE_WITH_VM_USERNAME
+WorkingDirectory=/home/REPLACE_WITH_VM_USERNAME/mlflow/server
+EnvironmentFile=/home/REPLACE_WITH_VM_USERNAME/mlflow/server/.env
+ExecStart=/home/REPLACE_WITH_VM_USERNAME/mlflow/server/venv/bin/mlflow server --host ${MLFLOW_HOST} --port ${MLFLOW_PORT} --allowed-hosts ${MLFLOW_ALLOWED_HOSTS} --cors-allowed-origins ${MLFLOW_CORS_ALLOWED_ORIGINS} --backend-store-uri ${BACKEND_STORE_URI} --default-artifact-root ${ARTIFACT_ROOT}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

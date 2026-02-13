@@ -20,7 +20,8 @@ python3 -m venv "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 python -m pip install --upgrade pip
-python -m pip install mlflow
+# Keep NumPy/SciPy ABI-compatible to avoid runtime import failures.
+python -m pip install "numpy<2" "scipy<1.12" "mlflow[auth]"
 
 echo "MLflow virtual environment ready at ${VENV_DIR}"
 echo "Installed version: $(python -m pip show mlflow | awk '/Version:/{print $2}')"
