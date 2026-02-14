@@ -2,7 +2,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_CONF="${SCRIPT_DIR}/generated/mlflow.conf"
+ENV_FILE="${SCRIPT_DIR}/.env"
+
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+fi
+
+GENERATED_DIR="${GENERATED_DIR:-${MLFLOW_HOME:-${SCRIPT_DIR}/runtime}/generated}"
+SRC_CONF="${GENERATED_DIR}/mlflow.conf"
 DST_CONF="/etc/nginx/conf.d/mlflow.conf"
 
 if [[ ! -f "${SRC_CONF}" ]]; then
@@ -21,4 +29,3 @@ echo "  ${DST_CONF}"
 echo
 echo "Quick callback route check:"
 echo "  curl -k -I \"https://mlflow.alcf.anl.gov/oauth2/callback?code=test&state=test\""
-

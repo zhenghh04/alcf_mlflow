@@ -71,7 +71,7 @@ Expected:
 - Allowlist source:
   - `OAUTH2_PROXY_ALLOWED_EMAILS` in `server/.env`
 - Generated file:
-  - `server/generated/oauth2-proxy-allowed-emails.txt`
+  - `server/runtime/generated/oauth2-proxy-allowed-emails.txt`
 - Current allowed users:
   - `huihuo.zheng@anl.gov`
   - `venkat@anl.gov`

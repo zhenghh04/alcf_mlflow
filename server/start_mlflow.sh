@@ -32,12 +32,6 @@ AUTH_ENABLED="$(echo "${AUTH_ENABLED}" | tr '[:upper:]' '[:lower:]')"
 GLOBUS_ENABLED="${ENABLE_GLOBUS_AUTH:-false}"
 GLOBUS_ENABLED="$(echo "${GLOBUS_ENABLED}" | tr '[:upper:]' '[:lower:]')"
 
-if [[ "${AUTH_ENABLED}" == "true" && "${GLOBUS_ENABLED}" == "true" ]]; then
-  echo "Both ENABLE_MLFLOW_AUTH and ENABLE_GLOBUS_AUTH are true."
-  echo "Set only one auth mode in server/.env."
-  exit 1
-fi
-
 if [[ "${AUTH_ENABLED}" == "true" ]]; then
   if [[ -z "${MLFLOW_FLASK_SERVER_SECRET_KEY:-}" || "${MLFLOW_FLASK_SERVER_SECRET_KEY}" == "CHANGE_ME_WITH_LONG_RANDOM_SECRET" ]]; then
     echo "MLFLOW_FLASK_SERVER_SECRET_KEY is not set to a secure value in server/.env."
@@ -62,12 +56,26 @@ if [[ -n "${MLFLOW_SERVER_ENABLE_JOB_EXECUTION:-}" ]]; then
   export MLFLOW_SERVER_ENABLE_JOB_EXECUTION
 fi
 
-if lsof -ti tcp:"${MLFLOW_PORT}" >/dev/null 2>&1; then
-  conflicting_pid="$(lsof -ti tcp:"${MLFLOW_PORT}" | head -n1)"
-  echo "Port ${MLFLOW_PORT} is already in use by PID ${conflicting_pid}."
-  ps -p "${conflicting_pid}" -o pid=,ppid=,command=
-  echo "I'll stop the existing process: $conflicting_pid"
-  kill $conflicting_pid
+mapfile -t conflicting_pids < <(lsof -t -iTCP:"${MLFLOW_PORT}" -sTCP:LISTEN 2>/dev/null | awk '!seen[$0]++')
+if [[ "${#conflicting_pids[@]}" -gt 0 ]]; then
+  echo "Port ${MLFLOW_PORT} has ${#conflicting_pids[@]} listening process(es):"
+  for pid in "${conflicting_pids[@]}"; do
+    ps -p "${pid}" -o pid=,ppid=,command= || true
+  done
+  echo "Stopping existing listener(s) on port ${MLFLOW_PORT}..."
+  for pid in "${conflicting_pids[@]}"; do
+    kill "${pid}" 2>/dev/null || true
+  done
+
+  # Wait briefly for graceful shutdown, then force kill if still listening.
+  sleep 1
+  mapfile -t remaining_conflicting_pids < <(lsof -t -iTCP:"${MLFLOW_PORT}" -sTCP:LISTEN 2>/dev/null | awk '!seen[$0]++')
+  if [[ "${#remaining_conflicting_pids[@]}" -gt 0 ]]; then
+    echo "Force-stopping remaining listener(s) on port ${MLFLOW_PORT}..."
+    for pid in "${remaining_conflicting_pids[@]}"; do
+      kill -9 "${pid}" 2>/dev/null || true
+    done
+  fi
 fi
 
 mkdir -p "$(dirname "${MLFLOW_LOG_FILE}")" "$(dirname "${MLFLOW_PID_FILE}")" "${ARTIFACT_ROOT}" "${MLFLOW_HOME}/data"

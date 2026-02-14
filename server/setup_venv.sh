@@ -3,9 +3,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
-EXAMPLE_ENV_FILE="${SCRIPT_DIR}/.env.example"
+EXAMPLE_ENV_FILE="${SCRIPT_DIR}/config/.env.example"
+
+if [[ ! -f "${EXAMPLE_ENV_FILE}" ]]; then
+  EXAMPLE_ENV_FILE="${SCRIPT_DIR}/.env.example"
+fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
+  if [[ ! -f "${EXAMPLE_ENV_FILE}" ]]; then
+    echo "Missing .env template. Expected one of:"
+    echo "  ${SCRIPT_DIR}/config/.env.example"
+    echo "  ${SCRIPT_DIR}/.env.example"
+    exit 1
+  fi
   cp "${EXAMPLE_ENV_FILE}" "${ENV_FILE}"
   echo "Created ${ENV_FILE} from template. Review values before starting MLflow."
 fi

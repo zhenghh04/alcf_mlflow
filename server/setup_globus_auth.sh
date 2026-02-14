@@ -18,12 +18,6 @@ if [[ "${ENABLE_GLOBUS_AUTH:-false}" != "true" ]]; then
   exit 1
 fi
 
-if [[ "${ENABLE_MLFLOW_AUTH:-false}" == "true" ]]; then
-  echo "ENABLE_MLFLOW_AUTH=true and ENABLE_GLOBUS_AUTH=true are mutually exclusive."
-  echo "Set ENABLE_MLFLOW_AUTH=false for Globus SSO mode."
-  exit 1
-fi
-
 for var_name in \
   PUBLIC_BASE_URL \
   MLFLOW_INTERNAL_UPSTREAM \
@@ -47,7 +41,7 @@ if [[ "${GLOBUS_OAUTH_CLIENT_SECRET}" == "REPLACE_WITH_GLOBUS_CLIENT_SECRET" ]];
   exit 1
 fi
 
-CONFIG_DIR="${SCRIPT_DIR}/generated"
+CONFIG_DIR="${GENERATED_DIR:-${MLFLOW_HOME:-${SCRIPT_DIR}/runtime}/generated}"
 mkdir -p "${CONFIG_DIR}"
 
 OAUTH_CFG="${CONFIG_DIR}/oauth2-proxy.cfg"
@@ -105,6 +99,7 @@ cookie_secret = "${OAUTH2_PROXY_COOKIE_SECRET}"
 cookie_httponly = true
 cookie_samesite = "lax"
 set_xauthrequest = true
+pass_user_headers = true
 pass_authorization_header = false
 set_authorization_header = false
 pass_access_token = false
@@ -153,10 +148,11 @@ server {
 
         auth_request_set \$user   \$upstream_http_x_auth_request_user;
         auth_request_set \$email  \$upstream_http_x_auth_request_email;
-        auth_request_set \$authz  \$upstream_http_authorization;
         proxy_set_header X-User   \$user;
         proxy_set_header X-Email  \$email;
-        proxy_set_header Authorization \$authz;
+        # Prevent stale/basic Authorization headers from collapsing users
+        # into one MLflow identity; bridge mode trusts X-Email instead.
+        proxy_set_header Authorization "";
 
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

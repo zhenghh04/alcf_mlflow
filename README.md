@@ -10,11 +10,12 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 
 ## What is included
 
-- `server/.env.example`: environment variables for paths, ports, and proxy settings
+- `server/config/.env.example`: environment variables for paths, ports, and proxy settings
 - `server/setup_venv.sh`: create Python virtual environment and install MLflow
 - `server/setup_auth.sh`: generate `basic_auth.ini` from `.env`
 - `server/setup_globus_auth.sh`: generate `oauth2-proxy` and `nginx` configs from `.env`
 - `server/setup_external_nginx_conf.sh`: generate external nginx `mlflow.conf` from `.env`
+- `server/setup_external_nginx_mlflow_auth_conf.sh`: generate external nginx config for MLflow built-in auth mode (no oauth2-proxy auth_request)
 - `server/install_external_nginx_conf.sh`: install generated external nginx config and reload nginx
 - `server/install_oauth2_proxy.sh`: build and install `oauth2-proxy` from GitHub source tag
 - `server/start_mlflow.sh`: start MLflow server in background with log + pid files
@@ -22,8 +23,8 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `server/health_check.sh`: validate server health endpoint
 - `server/create_user.sh`: create users in MLflow basic-auth
 - `server/mlflow.service`: optional systemd unit template
-- `server/mlflow-globus.service`: systemd unit template for MLflow behind Globus proxy
-- `server/oauth2-proxy.service`: systemd unit template for oauth2-proxy
+- `server/systemd/mlflow-globus.service`: systemd unit template for MLflow behind Globus proxy
+- `server/systemd/oauth2-proxy.service`: systemd unit template for oauth2-proxy
 - `server/install_systemd_globus.sh`: install + start Globus-mode systemd units
 - `examples/log_example.py`: minimal experiment logging test
 - `client/configure_client.sh`: helper to export tracking URI and credentials
@@ -34,11 +35,18 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - Architecture notes: `docs/mlflow-globus-architecture.md`
 - Architecture diagram (SVG): `docs/mlflow-globus-architecture.svg`
 
+## Reorganized server layout (portable setup)
+
+- `server/config/`: checked-in templates (including `.env.example`)
+- `server/systemd/`: checked-in systemd unit templates
+- `server/runtime/`: machine-local runtime state (venv, db, logs, generated configs)
+- `server/*.sh`: entrypoint scripts (kept stable for compatibility)
+
 ## Quick start (user process mode)
 
 ```bash
 cd mlflow
-cp server/.env.example server/.env
+cp server/config/.env.example server/.env
 # Edit server/.env for your VM paths and hostnames
 # Set strong values for:
 # - MLFLOW_FLASK_SERVER_SECRET_KEY
@@ -59,7 +67,7 @@ Expected health response:
 Run a logging test:
 
 ```bash
-source server/venv/bin/activate
+source server/runtime/venv/bin/activate
 export MLFLOW_TRACKING_USERNAME=admin
 export MLFLOW_TRACKING_PASSWORD='<admin-password>'
 python examples/log_example.py
@@ -87,11 +95,11 @@ https://mlflow.alcf.anl.gov
 
 ## Optional: run with systemd
 
-1. Update paths in `server/mlflow.service`.
+1. Update placeholders in `server/systemd/mlflow.service`.
 2. Install service (requires sudo):
 
 ```bash
-sudo cp server/mlflow.service /etc/systemd/system/mlflow.service
+sudo cp server/systemd/mlflow.service /etc/systemd/system/mlflow.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now mlflow
 sudo systemctl status mlflow
@@ -101,8 +109,8 @@ sudo systemctl status mlflow
 
 Default values in `.env.example`:
 
-- Backend store: `sqlite:///<home>/mlflow/server/data/mlflow.db`
-- Artifact root: `<home>/mlflow/server/artifacts`
+- Backend store: `sqlite:///${HOME}/alcf_mlflow/server/runtime/data/mlflow.db`
+- Artifact root: `${HOME}/alcf_mlflow/server/runtime/artifacts`
 
 For production, switch to PostgreSQL/MySQL for backend store and object storage (S3/MinIO) for artifacts.
 
@@ -130,7 +138,7 @@ This setup enables MLflow built-in basic authentication (`--app-name basic-auth`
    ```
 5. Configure client auth when tracking:
    ```bash
-   source server/venv/bin/activate
+   source server/runtime/venv/bin/activate
    bash client/configure_client.sh https://mlflow.alcf.anl.gov alice 'strong-password'
    ```
 
@@ -152,8 +160,8 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
    bash server/setup_globus_auth.sh
    ```
 4. Install generated files:
-   - `server/generated/oauth2-proxy.cfg` -> your oauth2-proxy runtime config path
-   - `server/generated/nginx-mlflow-globus.conf` -> your nginx site config path (only when `GENERATE_VM_NGINX_CONF=true`)
+   - `server/runtime/generated/oauth2-proxy.cfg` -> your oauth2-proxy runtime config path
+   - `server/runtime/generated/nginx-mlflow-globus.conf` -> your nginx site config path (only when `GENERATE_VM_NGINX_CONF=true`)
 5. Install `oauth2-proxy` binary:
    ```bash
    bash server/install_oauth2_proxy.sh
@@ -164,7 +172,7 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
    ```
 7. If VM nginx is used (`GENERATE_VM_NGINX_CONF=true`), install nginx config and reload nginx:
    ```bash
-   sudo cp server/generated/nginx-mlflow-globus.conf /etc/nginx/conf.d/mlflow-globus.conf
+   sudo cp server/runtime/generated/nginx-mlflow-globus.conf /etc/nginx/conf.d/mlflow-globus.conf
    sudo nginx -t
    sudo systemctl reload nginx
    ```
@@ -177,6 +185,87 @@ Use Globus OIDC in front of MLflow with `oauth2-proxy` + `nginx`.
    bash server/install_external_nginx_conf.sh
    ```
 
+## Single Shared MLflow Auth/RBAC mode (no Globus front-door)
+
+Use MLflow built-in auth (`--app-name basic-auth`) with one shared server and managed users/permissions.
+
+1. Switch auth mode:
+   ```bash
+   bash server/enable_shared_mlflow_auth_mode.sh
+   ```
+2. Generate auth config:
+   ```bash
+   bash server/setup_auth.sh
+   ```
+3. External nginx should proxy directly to MLflow (no `/oauth2/*` auth_request). Generate config:
+   ```bash
+   bash server/setup_external_nginx_mlflow_auth_conf.sh
+   ```
+4. Install generated nginx config and reload nginx:
+   ```bash
+   sudo cp server/runtime/generated/mlflow-basic-auth.conf /etc/nginx/conf.d/mlflow.conf
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+5. Restart MLflow service/process.
+6. Create users:
+   ```bash
+   bash server/create_user.sh <username> '<password>'
+   bash server/create_user.sh <admin-user> '<password>' --admin
+   ```
+
+## Single Shared MLflow Auth/RBAC + Globus SSO front-door
+
+Use Globus at external nginx/oauth2-proxy for SSO, and MLflow built-in auth/RBAC for in-app users/permissions.
+This keeps current ports (`8080`, `8081`) and avoids tenant-specific backend ports.
+
+1. Enable hybrid mode:
+   ```bash
+   bash server/enable_shared_globus_mlflow_rbac_mode.sh
+   ```
+2. Generate MLflow auth and oauth2-proxy configs:
+   ```bash
+   bash server/setup_auth.sh
+   bash server/setup_globus_auth.sh
+   ```
+3. Restart services:
+   ```bash
+   sudo systemctl restart mlflow-globus
+   sudo systemctl restart oauth2-proxy
+   ```
+4. Manage MLflow users/RBAC (uses internal URI by default):
+   ```bash
+   bash server/create_user.sh <username> '<password>'
+   bash server/create_user.sh <admin-user> '<password>' --admin
+   ```
+   - Optional override for admin API target:
+     - `MLFLOW_USER_ADMIN_TRACKING_URI` (default: `http://127.0.0.1:8080`)
+
+### Optional (Experimental): Identity Bridging (no second prompt)
+
+If you want Globus identity to map directly to MLflow users (instead of prompting for MLflow basic credentials), enable the bridge hook:
+
+```bash
+bash server/enable_globus_identity_bridge_mode.sh
+bash server/setup_auth.sh
+bash server/setup_globus_auth.sh
+sudo systemctl restart mlflow-globus
+sudo systemctl restart oauth2-proxy
+```
+
+Bridge settings in `server/.env`:
+- `MLFLOW_AUTH_AUTHORIZATION_FUNCTION=auth_bridge:authenticate_request_globus_header`
+- `MLFLOW_BRIDGE_USER_HEADER=X-Email`
+- `MLFLOW_BRIDGE_AUTO_CREATE_USERS=true`
+- `MLFLOW_BRIDGE_ALLOW_BASIC_FALLBACK_LOCAL_ONLY=true` (recommended)
+- `MLFLOW_BRIDGE_TRUSTED_LOCAL_ADDRS=127.0.0.1,::1,localhost`
+- `MLFLOW_BRIDGE_ADMIN_EMAILS=<comma-separated emails>` (optional)
+
+Notes:
+- This keeps Globus at the edge and uses proxied identity for MLflow auth.
+- Basic Auth fallback is limited to trusted local callers by default.
+- MLflow FastAPI `/gateway/` routes may not support custom authorization functions.
+
 ## Stop server
 
 ```bash
@@ -186,7 +275,7 @@ bash server/stop_mlflow.sh
 ## Troubleshooting
 
 - `NumPy/SciPy` mismatch errors (for example `A NumPy version >=1.21.6 and <1.28.0 is required`):
-  - Cause: running MLflow from a different Python environment (often base Conda), not `server/venv`.
+  - Cause: running MLflow from a different Python environment (often base Conda), not `server/runtime/venv`.
   - Fix:
     ```bash
     bash server/setup_venv.sh

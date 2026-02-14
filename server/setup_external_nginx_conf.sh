@@ -43,6 +43,13 @@ fi
 
 OAUTH2_PROXY_UPSTREAM="${EXTERNAL_NGINX_OAUTH2_UPSTREAM:-${EXTERNAL_NGINX_UPSTREAM_HOST}:${OAUTH2_PROXY_PORT}}"
 MLFLOW_UPSTREAM="${EXTERNAL_NGINX_MLFLOW_UPSTREAM:-${EXTERNAL_NGINX_UPSTREAM_HOST}:${MLFLOW_PORT}}"
+EXTERNAL_NGINX_AUTH_MODE="${EXTERNAL_NGINX_AUTH_MODE:-auth_request}"
+EXTERNAL_NGINX_AUTH_MODE="$(echo "${EXTERNAL_NGINX_AUTH_MODE}" | tr '[:upper:]' '[:lower:]')"
+
+if [[ "${EXTERNAL_NGINX_AUTH_MODE}" != "auth_request" && "${EXTERNAL_NGINX_AUTH_MODE}" != "oauth2_proxy_passthrough" ]]; then
+  echo "EXTERNAL_NGINX_AUTH_MODE must be one of: auth_request, oauth2_proxy_passthrough"
+  exit 1
+fi
 
 TLS_CERT_PATH="${EXTERNAL_NGINX_TLS_CERT_PATH:-/etc/letsencrypt/live/${EXTERNAL_NGINX_SERVER_NAME}/fullchain.pem}"
 TLS_KEY_PATH="${EXTERNAL_NGINX_TLS_KEY_PATH:-/etc/letsencrypt/live/${EXTERNAL_NGINX_SERVER_NAME}/privkey.pem}"
@@ -54,7 +61,7 @@ if [[ "${EXTERNAL_NGINX_USE_TLS}" != "true" && "${EXTERNAL_NGINX_USE_TLS}" != "f
   exit 1
 fi
 
-CONFIG_DIR="${SCRIPT_DIR}/generated"
+CONFIG_DIR="${GENERATED_DIR:-${MLFLOW_HOME:-${SCRIPT_DIR}/runtime}/generated}"
 mkdir -p "${CONFIG_DIR}"
 OUTPUT_FILE="${CONFIG_DIR}/mlflow.conf"
 
@@ -80,6 +87,28 @@ server {
     proxy_buffers 8 32k;
     proxy_busy_buffers_size 64k;
 
+EOF
+if [[ "${EXTERNAL_NGINX_AUTH_MODE}" == "oauth2_proxy_passthrough" ]]; then
+cat >> "${OUTPUT_FILE}" <<EOF
+    # No auth_request_set dependency: route all traffic via oauth2-proxy.
+    location / {
+        proxy_pass http://oauth2_proxy_vm;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        send_timeout 300;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+else
+cat >> "${OUTPUT_FILE}" <<EOF
     location = /oauth2/auth {
         proxy_pass http://oauth2_proxy_vm;
         proxy_set_header Host \$host;
@@ -104,10 +133,11 @@ server {
 
         auth_request_set \$user  \$upstream_http_x_auth_request_user;
         auth_request_set \$email \$upstream_http_x_auth_request_email;
-        auth_request_set \$authz \$upstream_http_authorization;
         proxy_set_header X-User \$user;
         proxy_set_header X-Email \$email;
-        proxy_set_header Authorization \$authz;
+        # Prevent stale/basic Authorization headers from collapsing users
+        # into one MLflow identity; bridge mode trusts X-Email instead.
+        proxy_set_header Authorization "";
 
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -118,6 +148,7 @@ server {
     }
 }
 EOF
+fi
 else
 cat > "${OUTPUT_FILE}" <<EOF
 upstream mlflow_vm {
@@ -137,6 +168,28 @@ server {
     proxy_buffers 8 32k;
     proxy_busy_buffers_size 64k;
 
+EOF
+if [[ "${EXTERNAL_NGINX_AUTH_MODE}" == "oauth2_proxy_passthrough" ]]; then
+cat >> "${OUTPUT_FILE}" <<EOF
+    # No auth_request_set dependency: route all traffic via oauth2-proxy.
+    location / {
+        proxy_pass http://oauth2_proxy_vm;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        send_timeout 300;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+else
+cat >> "${OUTPUT_FILE}" <<EOF
     location = /oauth2/auth {
         proxy_pass http://oauth2_proxy_vm;
         proxy_set_header Host \$host;
@@ -161,10 +214,11 @@ server {
 
         auth_request_set \$user  \$upstream_http_x_auth_request_user;
         auth_request_set \$email \$upstream_http_x_auth_request_email;
-        auth_request_set \$authz \$upstream_http_authorization;
         proxy_set_header X-User \$user;
         proxy_set_header X-Email \$email;
-        proxy_set_header Authorization \$authz;
+        # Prevent stale/basic Authorization headers from collapsing users
+        # into one MLflow identity; bridge mode trusts X-Email instead.
+        proxy_set_header Authorization "";
 
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -176,6 +230,7 @@ server {
 }
 EOF
 fi
+fi
 
 chmod 600 "${OUTPUT_FILE}"
 
@@ -185,5 +240,6 @@ echo
 echo "Resolved values:"
 echo "  EXTERNAL_NGINX_SERVER_NAME=${EXTERNAL_NGINX_SERVER_NAME}"
 echo "  EXTERNAL_NGINX_USE_TLS=${EXTERNAL_NGINX_USE_TLS}"
+echo "  EXTERNAL_NGINX_AUTH_MODE=${EXTERNAL_NGINX_AUTH_MODE}"
 echo "  EXTERNAL_NGINX_MLFLOW_UPSTREAM=${MLFLOW_UPSTREAM}"
 echo "  EXTERNAL_NGINX_OAUTH2_UPSTREAM=${OAUTH2_PROXY_UPSTREAM}"
