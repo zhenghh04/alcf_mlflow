@@ -4,8 +4,17 @@ This example imports W&B tracking data into MLflow.
 
 Script:
 
-- `wandb2mlflow.py`
-- `wandb_to_mlflow_translation.py`
+- `wandb2mlflow_conversion.py`
+- `wandb2mlflow_translation.py`
+
+## Two Migration Paths
+
+1. Convert existing W&B run logs to MLflow
+   - Use: `wandb2mlflow_conversion.py`
+   - Best when you already have completed W&B runs and want them copied into MLflow.
+2. Translate existing training code from W&B logging style to MLflow logging style
+   - Use: `wandb2mlflow_translation.py`
+   - Best when you are updating scripts/pipelines to log directly to MLflow going forward.
 
 Import modes:
 
@@ -49,7 +58,7 @@ python -m pip install wandb
 ```bash
 cd ../../
 source server/venv/bin/activate
-python examples/migration/wandb2mlflow.py --wandb-run-path "<entity>/<project>/<run_id>"
+python examples/migration/wandb2mlflow_conversion.py --wandb-run-path "<entity>/<project>/<run_id>"
 ```
 
 ## Run (file mode)
@@ -57,7 +66,7 @@ python examples/migration/wandb2mlflow.py --wandb-run-path "<entity>/<project>/<
 ```bash
 cd ../../
 source server/venv/bin/activate
-python examples/migration/wandb2mlflow.py \
+python examples/migration/wandb2mlflow_conversion.py \
   --history-csv /path/to/wandb_history.csv \
   --summary-json /path/to/wandb_summary.json \
   --config-json /path/to/wandb_config.json
@@ -68,7 +77,7 @@ python examples/migration/wandb2mlflow.py \
 ```bash
 cd ../../
 source server/venv/bin/activate
-python examples/migration/wandb_to_mlflow_translation.py --epochs 3
+python examples/migration/wandb2mlflow_translation.py --epochs 3
 ```
 
 ## W&B to MLflow Call Translation

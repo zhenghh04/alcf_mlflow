@@ -26,7 +26,8 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `examples/README.md`: index of all example workflows
 - `examples/basic/log_example.py`: minimal experiment logging test
 - `examples/prompts_tracing/log_openai_prompt.py`: OpenAI prompt/response + token usage tracking example
-- `examples/migration/wandb2mlflow.py`: import W&B run metrics/config into MLflow
+- `examples/migration/wandb2mlflow_conversion.py`: convert existing W&B run logs into MLflow
+- `examples/migration/wandb2mlflow_translation.py`: translate W&B-style code logging into MLflow-style logging
 - `client/configure_client.sh`: helper to export tracking URI and credentials
 
 ## Quick start (user process mode)
@@ -116,14 +117,14 @@ Import a W&B run into MLflow:
 ```bash
 source server/venv/bin/activate
 python -m pip install wandb
-python examples/migration/wandb2mlflow.py --wandb-run-path '<entity>/<project>/<run_id>'
+python examples/migration/wandb2mlflow_conversion.py --wandb-run-path '<entity>/<project>/<run_id>'
 ```
 
 Import from exported W&B files (no API access needed):
 
 ```bash
 source server/venv/bin/activate
-python examples/migration/wandb2mlflow.py \
+python examples/migration/wandb2mlflow_conversion.py \
   --history-csv /path/to/wandb_history.csv \
   --summary-json /path/to/wandb_summary.json \
   --config-json /path/to/wandb_config.json
