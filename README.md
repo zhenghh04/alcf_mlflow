@@ -23,7 +23,10 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `server/mlflow-globus.service`: systemd unit template for MLflow behind Globus proxy
 - `server/oauth2-proxy.service`: systemd unit template for oauth2-proxy
 - `server/install_systemd_globus.sh`: install + start Globus-mode systemd units
-- `examples/log_example.py`: minimal experiment logging test
+- `examples/README.md`: index of all example workflows
+- `examples/basic/log_example.py`: minimal experiment logging test
+- `examples/prompts_tracing/log_openai_prompt.py`: OpenAI prompt/response + token usage tracking example
+- `examples/migration/wandb2mlflow.py`: import W&B run metrics/config into MLflow
 - `client/configure_client.sh`: helper to export tracking URI and credentials
 
 ## Quick start (user process mode)
@@ -48,19 +51,88 @@ Expected health response:
 {"status": "OK"}
 ```
 
+Create example env file (recommended):
+
+```bash
+cp examples/.env.example examples/.env
+# Edit examples/.env (set AM_SC_API_KEY, OPENAI_API_KEY, etc.)
+```
+
 Run a logging test:
 
 ```bash
 source server/venv/bin/activate
-export MLFLOW_TRACKING_USERNAME=admin
-export MLFLOW_TRACKING_PASSWORD='<admin-password>'
-python examples/log_example.py
+python examples/basic/log_example.py
+```
+
+Run an LLM tracking test (prompt/response/tokens):
+
+```bash
+source server/venv/bin/activate
+python -m pip install openai
+python examples/prompts_tracing/log_openai_prompt.py
+```
+
+The run logs:
+- native MLflow traces for each OpenAI call (Traces UI)
+- per-question metrics (`query_latency_sec`, `query_prompt_tokens`, `query_completion_tokens`, `query_total_tokens`)
+- aggregated token metrics (`prompt_tokens_total`, `completion_tokens_total`, `total_tokens_total`)
+- summary artifact (`llm/trace/trace_summary.json`)
+
+## Prompt Tracing Setup
+
+This repository uses MLflow native tracing through `mlflow.openai.autolog(log_traces=True)` in:
+
+- `examples/prompts_tracing/log_openai_prompt.py`
+
+Enable and run prompt tracing:
+
+```bash
+cd mlflow
+cp examples/.env.example examples/.env
+# Required in examples/.env: AM_SC_API_KEY, OPENAI_API_KEY
+# Optional: OPENAI_MODEL, MLFLOW_EXPERIMENT_NAME, OPENAI_PROMPTS_JSON
+source server/venv/bin/activate
+python -m pip install openai
+python examples/prompts_tracing/log_openai_prompt.py
+```
+
+Where to view results:
+
+1. Go to the experiment `alcf-vm-openai-tracking`.
+2. Open the latest run.
+3. Open the `Traces` tab to inspect prompt/response records for each OpenAI call.
+
+Minimal code change required in your OpenAI script:
+
+```python
+mlflow.set_tracking_uri("https://mlflow.american-science-cloud.org")
+mlflow.set_experiment("my-exp")
+mlflow.openai.autolog(log_traces=True, silent=True)
+```
+
+Import a W&B run into MLflow:
+
+```bash
+source server/venv/bin/activate
+python -m pip install wandb
+python examples/migration/wandb2mlflow.py --wandb-run-path '<entity>/<project>/<run_id>'
+```
+
+Import from exported W&B files (no API access needed):
+
+```bash
+source server/venv/bin/activate
+python examples/migration/wandb2mlflow.py \
+  --history-csv /path/to/wandb_history.csv \
+  --summary-json /path/to/wandb_summary.json \
+  --config-json /path/to/wandb_config.json
 ```
 
 Then open in browser:
 
 ```text
-https://mlflow.alcf.anl.gov
+https://mlflow.american-science-cloud.org
 ```
 
 ## ALCF-specific notes
