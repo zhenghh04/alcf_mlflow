@@ -5,3 +5,7 @@ server/*.db
 server/logs/
 server/run/
 server/venv/
+__pycache__/
+*.pyc
+server/*.service
+!server/systemd/*.service

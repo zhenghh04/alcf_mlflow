@@ -18,12 +18,6 @@ if [[ "${ENABLE_GLOBUS_AUTH:-false}" != "true" ]]; then
   exit 1
 fi
 
-if [[ "${ENABLE_MLFLOW_AUTH:-false}" == "true" ]]; then
-  echo "ENABLE_MLFLOW_AUTH=true and ENABLE_GLOBUS_AUTH=true are mutually exclusive."
-  echo "Set ENABLE_MLFLOW_AUTH=false for Globus SSO mode."
-  exit 1
-fi
-
 for var_name in \
   PUBLIC_BASE_URL \
   MLFLOW_INTERNAL_UPSTREAM \
@@ -47,11 +41,12 @@ if [[ "${GLOBUS_OAUTH_CLIENT_SECRET}" == "REPLACE_WITH_GLOBUS_CLIENT_SECRET" ]];
   exit 1
 fi
 
-CONFIG_DIR="${SCRIPT_DIR}/generated"
+CONFIG_DIR="${GENERATED_DIR:-${MLFLOW_HOME:-${SCRIPT_DIR}/runtime}/generated}"
 mkdir -p "${CONFIG_DIR}"
 
 OAUTH_CFG="${CONFIG_DIR}/oauth2-proxy.cfg"
 NGINX_CFG="${CONFIG_DIR}/nginx-mlflow-globus.conf"
+ALLOWED_EMAILS_FILE="${CONFIG_DIR}/oauth2-proxy-allowed-emails.txt"
 GENERATE_VM_NGINX_CONF="${GENERATE_VM_NGINX_CONF:-true}"
 GENERATE_VM_NGINX_CONF="$(echo "${GENERATE_VM_NGINX_CONF}" | tr '[:upper:]' '[:lower:]')"
 
@@ -60,6 +55,33 @@ VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME#http://}"
 VM_NGINX_SERVER_NAME="${VM_NGINX_SERVER_NAME%%/*}"
 VM_TLS_CERT_PATH="${VM_TLS_CERT_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/fullchain.pem}"
 VM_TLS_KEY_PATH="${VM_TLS_KEY_PATH:-/etc/letsencrypt/live/${VM_NGINX_SERVER_NAME}/privkey.pem}"
+OAUTH2_PROXY_UPSTREAM_SERVER="${OAUTH2_PROXY_HTTP_ADDRESS#http://}"
+OAUTH2_PROXY_UPSTREAM_SERVER="${OAUTH2_PROXY_UPSTREAM_SERVER#https://}"
+
+AUTH_EMAILS_CFG_LINE=""
+if [[ -n "${OAUTH2_PROXY_ALLOWED_EMAILS:-}" ]]; then
+  : > "${ALLOWED_EMAILS_FILE}"
+  IFS=',' read -r -a raw_allowed_emails <<< "${OAUTH2_PROXY_ALLOWED_EMAILS}"
+  valid_count=0
+  for raw_email in "${raw_allowed_emails[@]}"; do
+    email="$(printf '%s' "${raw_email}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    if [[ -z "${email}" ]]; then
+      continue
+    fi
+    if [[ "${email}" != *@* ]]; then
+      echo "Invalid email in OAUTH2_PROXY_ALLOWED_EMAILS: ${email}"
+      exit 1
+    fi
+    printf '%s\n' "${email}" >> "${ALLOWED_EMAILS_FILE}"
+    valid_count=$((valid_count + 1))
+  done
+  if [[ "${valid_count}" -eq 0 ]]; then
+    echo "OAUTH2_PROXY_ALLOWED_EMAILS is set but no valid emails were found."
+    exit 1
+  fi
+  chmod 600 "${ALLOWED_EMAILS_FILE}"
+  AUTH_EMAILS_CFG_LINE="authenticated_emails_file = \"${ALLOWED_EMAILS_FILE}\""
+fi
 
 cat > "${OAUTH_CFG}" <<EOF
 provider = "oidc"
@@ -71,14 +93,16 @@ upstreams = [ "${MLFLOW_INTERNAL_UPSTREAM}" ]
 http_address = "${OAUTH2_PROXY_HTTP_ADDRESS}"
 scope = "openid profile email"
 email_domains = [ "${OAUTH2_PROXY_EMAIL_DOMAINS}" ]
+${AUTH_EMAILS_CFG_LINE}
 cookie_secure = true
 cookie_secret = "${OAUTH2_PROXY_COOKIE_SECRET}"
 cookie_httponly = true
 cookie_samesite = "lax"
 set_xauthrequest = true
-pass_authorization_header = true
-set_authorization_header = true
-pass_access_token = true
+pass_user_headers = true
+pass_authorization_header = false
+set_authorization_header = false
+pass_access_token = false
 skip_provider_button = true
 EOF
 
@@ -89,7 +113,7 @@ upstream mlflow_upstream {
 }
 
 upstream oauth2_proxy {
-    server 127.0.0.1:4180;
+    server ${OAUTH2_PROXY_UPSTREAM_SERVER};
 }
 
 server {
@@ -124,10 +148,11 @@ server {
 
         auth_request_set \$user   \$upstream_http_x_auth_request_user;
         auth_request_set \$email  \$upstream_http_x_auth_request_email;
-        auth_request_set \$authz  \$upstream_http_authorization;
         proxy_set_header X-User   \$user;
         proxy_set_header X-Email  \$email;
-        proxy_set_header Authorization \$authz;
+        # Prevent stale/basic Authorization headers from collapsing users
+        # into one MLflow identity; bridge mode trusts X-Email instead.
+        proxy_set_header Authorization "";
 
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -147,6 +172,9 @@ fi
 
 echo "Generated:"
 echo "  ${OAUTH_CFG}"
+if [[ -n "${AUTH_EMAILS_CFG_LINE}" ]]; then
+  echo "  ${ALLOWED_EMAILS_FILE}"
+fi
 if [[ "${GENERATE_VM_NGINX_CONF}" == "true" ]]; then
   echo "  ${NGINX_CFG}"
 fi

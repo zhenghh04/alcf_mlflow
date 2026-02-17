@@ -1,59 +1,40 @@
-# W&B to MLflow Migration Example
+# W&B to MLflow Migration
 
-This example imports W&B tracking data into MLflow.
+This folder supports two different migration goals:
 
-Script:
+1. Convert existing W&B run logs into MLflow runs.
+2. Translate W&B-style logging code into MLflow-style logging code.
 
-- `wandb2mlflow_conversion.py`
-- `wandb2mlflow_translation.py`
+## Scripts
 
-## Two Migration Paths
+- `wandb2mlflow_conversion.py`: converts existing W&B run data to MLflow.
+- `wandb2mlflow_translation.py`: runnable code-translation example (W&B logging pattern -> MLflow logging pattern).
 
-1. Convert existing W&B run logs to MLflow
-   - Use: `wandb2mlflow_conversion.py`
-   - Best when you already have completed W&B runs and want them copied into MLflow.
-2. Translate existing training code from W&B logging style to MLflow logging style
-   - Use: `wandb2mlflow_translation.py`
-   - Best when you are updating scripts/pipelines to log directly to MLflow going forward.
-
-Import modes:
-
-1. W&B API mode with `--wandb-run-path <entity>/<project>/<run_id>`
-2. File mode with exported W&B files:
-   - `--history-csv`
-   - optional `--summary-json`
-   - optional `--config-json`
-
-## Prerequisites
+## Setup
 
 From `mlflow/`:
 
 ```bash
 cp examples/.env.example examples/.env
-```
-
-Required in `examples/.env`:
-
-- `MLFLOW_TRACKING_URI`
-- `AM_SC_API_KEY`
-
-For API mode:
-
-- `WANDB_API_KEY` (or export before running)
-
-Optional:
-
-- `WANDB_RUN_PATH`
-- `MLFLOW_EXPERIMENT_NAME` (defaults to `wandb-import`)
-
-Install dependency:
-
-```bash
 source server/venv/bin/activate
 python -m pip install wandb
 ```
 
-## Run (API mode)
+Required keys in `examples/.env`:
+
+- `MLFLOW_TRACKING_URI`
+- `AM_SC_API_KEY`
+
+Additional keys by workflow:
+
+- Conversion via W&B API: `WANDB_API_KEY`
+- Optional defaults: `WANDB_RUN_PATH`, `MLFLOW_EXPERIMENT_NAME`
+
+## Workflow A: Convert Existing W&B Runs
+
+Use `wandb2mlflow_conversion.py`.
+
+### Option A1: Convert directly from W&B API
 
 ```bash
 cd ../../
@@ -61,7 +42,7 @@ source server/venv/bin/activate
 python examples/migration/wandb2mlflow_conversion.py --wandb-run-path "<entity>/<project>/<run_id>"
 ```
 
-## Run (file mode)
+### Option A2: Convert from exported W&B files
 
 ```bash
 cd ../../
@@ -72,7 +53,17 @@ python examples/migration/wandb2mlflow_conversion.py \
   --config-json /path/to/wandb_config.json
 ```
 
-## Run (translation example: W&B style -> MLflow style)
+What this conversion logs to MLflow:
+
+- Config values as params
+- History numeric fields as metrics (step-aware)
+- Summary numeric fields as `summary/*` metrics
+- Source metadata artifact: `wandb/source_metadata.json`
+- Input files under `wandb/raw` (file mode)
+
+## Workflow B: Translate W&B Logging Code to MLflow
+
+Use `wandb2mlflow_translation.py`.
 
 ```bash
 cd ../../
@@ -80,9 +71,9 @@ source server/venv/bin/activate
 python examples/migration/wandb2mlflow_translation.py --epochs 3
 ```
 
-## W&B to MLflow Call Translation
+This script demonstrates direct API mapping.
 
-W&B:
+W&B style:
 
 ```python
 run = wandb.init(project="demo", config=vars(args))
@@ -90,7 +81,7 @@ wandb.log({"train/loss": loss, "train/acc": acc, "epoch": epoch})
 run.finish()
 ```
 
-MLflow equivalent:
+MLflow style:
 
 ```python
 mlflow.set_experiment("demo")
@@ -101,19 +92,14 @@ with mlflow.start_run():
     mlflow.log_metric("epoch", epoch, step=epoch)
 ```
 
-Common mapping:
+Mapping summary:
 
 - `wandb.init(project=..., config=...)` -> `mlflow.set_experiment(...)` + `mlflow.start_run(...)` + `mlflow.log_params(...)`
-- `wandb.log({...})` -> `mlflow.log_metric(...)` (repeat per key, with `step`)
-- `wandb.config` -> MLflow params (`mlflow.log_param(s)`)
+- `wandb.log({...})` -> `mlflow.log_metric(...)` for each metric key
+- `wandb.config` -> `mlflow.log_param(...)` / `mlflow.log_params(...)`
 - `wandb.run.summary[...]` -> final metrics/tags/artifacts in MLflow
-- `wandb.finish()` -> end of `with mlflow.start_run():` block
+- `wandb.finish()` -> end of `with mlflow.start_run():`
 
-## What gets logged to MLflow
+Translation demo artifact:
 
-- Config values as params
-- History numeric fields as metrics (step-aware)
-- Summary numeric fields as `summary/*` metrics
-- Source metadata artifact: `wandb/source_metadata.json`
-- Input files as artifacts under `wandb/raw` (file mode)
-- Translation demo summary artifact: `translation/summary.json`
+- `translation/summary.json`
