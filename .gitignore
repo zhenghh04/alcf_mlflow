@@ -1,0 +1,7 @@
+server/.env
+server/generated/
+server/auth/
+server/*.db
+server/logs/
+server/run/
+server/venv/
