@@ -7,6 +7,7 @@ This folder supports two different migration goals:
 
 ## Scripts
 
+- `wandb_example.py`: create a sample W&B run (source log generation).
 - `wandb2mlflow_conversion.py`: converts existing W&B run data to MLflow.
 - `wandb2mlflow_translation.py`: runnable code-translation example (W&B logging pattern -> MLflow logging pattern).
 
@@ -27,12 +28,34 @@ Required keys in `examples/.env`:
 
 Additional keys by workflow:
 
-- Conversion via W&B API: `WANDB_API_KEY`
-- Optional defaults: `WANDB_RUN_PATH`, `MLFLOW_EXPERIMENT_NAME`
+- W&B run generation / conversion via API: `WANDB_API_KEY`
+- Optional defaults: `WANDB_ENTITY`, `WANDB_PROJECT`, `WANDB_RUN_PATH`, `MLFLOW_EXPERIMENT_NAME`
 
 ## Workflow A: Convert Existing W&B Runs
 
 Use `wandb2mlflow_conversion.py`.
+
+### A0: Generate an existing W&B run
+
+Below is an example of tracking an machine learning training with W&B. 
+```bash
+cd ../../
+source server/venv/bin/activate
+python examples/migration/wandb_example.py --epochs 20
+```
+
+This prints:
+
+- W&B run URL
+- `Run path for conversion: <entity>/<project>/<run_id>`
+
+This example logs richer training-style data, including:
+
+- Hyperparameters: `learning_rate`, `batch_size`, `weight_decay`, `dropout`, `optimizer`, `model_name`, `seed`, `epochs`
+- Per-epoch metrics: `train/loss`, `train/acc`, `val/loss`, `val/acc`, `val/best_acc`, `lr`, `grad_norm`, `system/epoch_time_sec`
+- Summary metrics: final train/val metrics, best validation accuracy, total runtime
+
+Use that run path in Option A1.
 
 ### Option A1: Convert directly from W&B API
 
@@ -41,6 +64,14 @@ cd ../../
 source server/venv/bin/activate
 python examples/migration/wandb2mlflow_conversion.py --wandb-run-path "<entity>/<project>/<run_id>"
 ```
+
+`--wandb-run-path` also accepts a local W&B run directory, for example:
+
+```bash
+python examples/migration/wandb2mlflow_conversion.py --wandb-run-path "./wandb/run-20260217_143946-ohbbg66e"
+```
+
+When you pass a local directory, the converter reads local files under `files/` (for example `wandb-summary.json`, `config.yaml`, `wandb-history.jsonl`) and imports what is available.
 
 ### Option A2: Convert from exported W&B files
 

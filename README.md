@@ -29,8 +29,10 @@ This folder contains a complete, VM-oriented setup for running an MLflow trackin
 - `examples/README.md`: index of all example workflows
 - `examples/basic/log_example.py`: minimal experiment logging test
 - `examples/prompts_tracing/log_openai_prompt.py`: OpenAI prompt/response + token usage tracking example
+- `examples/migration/wandb_example.py`: generate sample W&B logs for conversion demos
 - `examples/migration/wandb2mlflow_conversion.py`: convert existing W&B run logs into MLflow
 - `examples/migration/wandb2mlflow_translation.py`: translate W&B-style code logging into MLflow-style logging
+- `examples/mcp_server/server.py`: MCP server for querying MLflow experiments and runs
 - `client/configure_client.sh`: helper to export tracking URI and credentials
 
 ## Operations docs
